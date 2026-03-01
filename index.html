@@ -16,8 +16,7 @@ body{
   height:100vh;
   color:white;
   font-family:sans-serif;
-user-select: none;
-  -webkit-user-select: none;
+  user-select:none;
 }
 #ui{
   position:absolute;
@@ -45,20 +44,18 @@ Combo: <span id="combo">0</span><br>
 
 <script>
 const COLS=10, ROWS=20;
-const SUB=6; // 超微粒子
+const SUB=8; // ★ 超微粒子化
 
 let CELL,SIZE,P_COLS,P_ROWS;
-let gameOver=false;
-let holdPiece = null;
-let canHold = true;
+let grid=[],current,nextPiece;
+let score=0,lines=0,combo=0;
+let paused=false,gameOver=false;
+let holdPiece=null,canHold=true;
+let messageTimer=0,messageText="";
+let counter=0;
 
 const canvas=document.getElementById("game");
 const ctx=canvas.getContext("2d");
-
-let grid=[],current,nextPiece;
-let score=0,lines=0,combo=0;
-let paused=false;
-let lastRotate=false;
 
 const COLORS=["#ffee00","#00eaff","#ff00ff","#ff0033","#00ff66","#ff8800"];
 const SHAPES=[
@@ -66,15 +63,9 @@ const SHAPES=[
  [[1,1],[1,1]],
  [[0,1,0],[1,1,1]]
 ];
-let messageTimer=0;
-let messageText="";
 
-function showMessage(text){
-  messageText=text;
-  messageTimer=60;
-}
 function resize(){
-  const scale=Math.min(window.innerHeight/22,window.innerWidth/12);
+  const scale=Math.min(window.innerHeight/22,window.innerWidth/14);
   CELL=Math.floor(scale);
   SIZE=CELL/SUB;
   canvas.width=CELL*COLS;
@@ -86,21 +77,19 @@ window.addEventListener("resize",resize);
 resize();
 
 function init(){
-holdPiece=null;
-nextPiece=null;
-canHold=true;
   grid=[];
   for(let y=0;y<P_ROWS;y++){
     grid[y]=[];
     for(let x=0;x<P_COLS;x++) grid[y][x]=null;
   }
   score=0;lines=0;combo=0;
+  holdPiece=null;nextPiece=null;canHold=true;
   updateUI();
 }
 init();
 
 function randomPiece(){
-  return {
+  return{
     shape:JSON.parse(JSON.stringify(SHAPES[Math.floor(Math.random()*SHAPES.length)])),
     x:3,y:0,
     color:COLORS[Math.floor(Math.random()*COLORS.length)]
@@ -108,13 +97,13 @@ function randomPiece(){
 }
 
 function newPiece(){
-  current = nextPiece || randomPiece();
-  nextPiece = randomPiece();
-  canHold = true; // 新しいブロックが出たらホールド可能
+  current=nextPiece||randomPiece();
+  nextPiece=randomPiece();
+  canHold=true;
 }
 
 function drawParticle(x,y,color){
-  ctx.shadowBlur=8;
+  ctx.shadowBlur=6;
   ctx.shadowColor=color;
   ctx.fillStyle=color;
   ctx.fillRect(x*SIZE,y*SIZE,SIZE,SIZE);
@@ -124,148 +113,98 @@ function drawParticle(x,y,color){
 function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  // ===== 砂粒描画 =====
+  // 粒子
   for(let y=0;y<P_ROWS;y++){
     for(let x=0;x<P_COLS;x++){
-      if(grid[y][x]){
-        ctx.shadowBlur=8;
-        ctx.shadowColor=grid[y][x];
-        ctx.fillStyle=grid[y][x];
-        ctx.fillRect(x*SIZE,y*SIZE,SIZE,SIZE);
-        ctx.shadowBlur=0;
-      }
+      if(grid[y][x]) drawParticle(x,y,grid[y][x]);
     }
   }
 
-  // ===== ゴーストピース計算 =====
-  let originalY = current.y;
-  let ghostY = current.y;
-
+  // ゴースト
+  let oy=current.y;
   while(true){
-    ghostY++;
-    current.y = ghostY;
-    if(collide()){
-      ghostY--;
-      break;
-    }
+    current.y++;
+    if(collide()){current.y--;break;}
+  }
+  let gy=current.y;
+  current.y=oy;
+
+  ctx.globalAlpha=0.25;
+  drawBlock(current,gy);
+  ctx.globalAlpha=1;
+
+  drawBlock(current,current.y);
+
+  // NEXT表示
+  if(nextPiece){
+    ctx.font="16px sans-serif";
+    ctx.fillStyle="#00ffff";
+    ctx.fillText("NEXT",canvas.width-80,20);
+
+    nextPiece.shape.forEach((row,dy)=>{
+      row.forEach((v,dx)=>{
+        if(v){
+          ctx.shadowBlur=10;
+          ctx.shadowColor=nextPiece.color;
+          ctx.fillStyle=nextPiece.color;
+          ctx.fillRect(
+            canvas.width-80+dx*15,
+            30+dy*15,
+            15,15
+          );
+          ctx.shadowBlur=0;
+        }
+      });
+    });
   }
 
-  current.y = originalY; // 戻す
-
-  // ===== ゴースト描画 =====
-  ctx.globalAlpha = 0.25;
-  current.shape.forEach((row,dy)=>{
-    row.forEach((v,dx)=>{
-      if(v){
-        ctx.shadowBlur=15;
-        ctx.shadowColor=current.color;
-        ctx.fillStyle=current.color;
-        ctx.fillRect(
-          (current.x+dx)*CELL,
-          (ghostY+dy)*CELL,
-          CELL,
-          CELL
-        );
-        ctx.shadowBlur=0;
-      }
+  // HOLD
+  if(holdPiece){
+    ctx.fillText("HOLD",10,20);
+    holdPiece.shape.forEach((row,dy)=>{
+      row.forEach((v,dx)=>{
+        if(v){
+          ctx.shadowBlur=10;
+          ctx.shadowColor=holdPiece.color;
+          ctx.fillStyle=holdPiece.color;
+          ctx.fillRect(10+dx*15,30+dy*15,15,15);
+          ctx.shadowBlur=0;
+        }
+      });
     });
-  });
-  ctx.globalAlpha = 1;
+  }
 
-  // ===== 現在のブロック描画 =====
-  current.shape.forEach((row,dy)=>{
-    row.forEach((v,dx)=>{
-      if(v){
-        ctx.shadowBlur=20;
-        ctx.shadowColor=current.color;
-        ctx.fillStyle=current.color;
-        ctx.fillRect(
-          (current.x+dx)*CELL,
-          (current.y+dy)*CELL,
-          CELL,
-          CELL
-        );
-        ctx.shadowBlur=0;
-      }
-    });
-  });
-
-  // ===== T-SPIN / メッセージ表示 =====
+  // メッセージ
   if(messageTimer>0){
     ctx.font="bold 40px sans-serif";
     ctx.fillStyle="#00ffff";
     ctx.textAlign="center";
-    ctx.shadowBlur=20;
-    ctx.shadowColor="#00ffff";
     ctx.fillText(messageText,canvas.width/2,canvas.height/2);
-    ctx.shadowBlur=0;
     messageTimer--;
   }
 
-  // ===== ポーズ表示 =====
-  if(paused){
-  ctx.fillStyle="rgba(0,0,20,0.8)";
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-
-  ctx.font="bold 60px sans-serif";
-  ctx.fillStyle="#00ffff";
-  ctx.textAlign="center";
-  ctx.shadowBlur=40;
-  ctx.shadowColor="#00ffff";
-  ctx.fillText("PAUSED",canvas.width/2,canvas.height/2-20);
-
-  ctx.font="20px sans-serif";
-  ctx.fillStyle="#ffffff";
-  ctx.shadowBlur=10;
-  ctx.shadowColor="#00ffff";
-  ctx.fillText("Press P to Resume",canvas.width/2,canvas.height/2+30);
-
-  ctx.shadowBlur=0;
+  if(gameOver){
+    ctx.fillStyle="rgba(0,0,0,0.8)";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.font="bold 50px sans-serif";
+    ctx.fillStyle="#ff0033";
+    ctx.textAlign="center";
+    ctx.fillText("GAME OVER",canvas.width/2,canvas.height/2);
+  }
 }
-    if(gameOver){
-  ctx.fillStyle="rgba(0,0,0,0.8)";
-  ctx.fillRect(0,0,canvas.width,canvas.height);
 
-  ctx.font="bold 55px sans-serif";
-  ctx.fillStyle="#ff0033";
-  ctx.textAlign="center";
-  ctx.shadowBlur=40;
-  ctx.shadowColor="#ff0033";
-  ctx.fillText("GAME OVER",canvas.width/2,canvas.height/2-40);
-
-  ctx.font="25px sans-serif";
-  ctx.fillStyle="#ffffff";
-  ctx.shadowBlur=20;
-  ctx.shadowColor="#00ffff";
-  ctx.fillText("SCORE: "+score,canvas.width/2,canvas.height/2+10);
-  ctx.fillText("Press R or Tap to Retry",canvas.width/2,canvas.height/2+50);
-
-  ctx.shadowBlur=0;
-}
-// ===== HOLD表示 =====
-if(holdPiece){
-  ctx.font="16px sans-serif";
-  ctx.fillStyle="#00ffff";
-  ctx.textAlign="left";
-  ctx.fillText("HOLD",10,20);
-
-  holdPiece.shape.forEach((row,dy)=>{
+function drawBlock(piece,py){
+  piece.shape.forEach((row,dy)=>{
     row.forEach((v,dx)=>{
       if(v){
-        ctx.shadowBlur=10;
-        ctx.shadowColor=holdPiece.color;
-        ctx.fillStyle=holdPiece.color;
-        ctx.fillRect(
-          10 + dx*15,
-          30 + dy*15,
-          15,
-          15
-        );
+        ctx.shadowBlur=20;
+        ctx.shadowColor=piece.color;
+        ctx.fillStyle=piece.color;
+        ctx.fillRect((piece.x+dx)*CELL,(py+dy)*CELL,CELL,CELL);
         ctx.shadowBlur=0;
       }
     });
   });
-}
 }
 
 function collide(){
@@ -277,7 +216,7 @@ function collide(){
         if(nx<0||nx>=COLS||ny>=ROWS) return true;
         for(let sy=0;sy<SUB;sy++){
           for(let sx=0;sx<SUB;sx++){
-            if(grid[(ny*SUB)+sy]?.[(nx*SUB)+sx]) return true;
+            if(grid[ny*SUB+sy]?.[nx*SUB+sx]) return true;
           }
         }
       }
@@ -301,66 +240,68 @@ function merge(){
 }
 
 function updatePhysics(){
+
   for(let y=P_ROWS-2;y>=0;y--){
     for(let x=0;x<P_COLS;x++){
 
-      let c=grid[y][x];
+      let c = grid[y][x];
       if(!c) continue;
 
-      let fallChance=0.8;
-      let spreadChance=0.4;
+      let fallChance = 0.8;
+      let spreadChance = 0.4;
 
-      // Yellow 超重い
+      // ===== 🟡 Yellow 超重量 =====
       if(c==="#ffee00"){
-        fallChance=1;
-        spreadChance=0.02;
+        fallChance = 1;
+        spreadChance = 0.05;
       }
 
-      // Cyan 超軽い
+      // ===== 🔵 Cyan 超軽量 =====
       if(c==="#00eaff"){
-        fallChance=0.4;
-        spreadChance=1;
+        fallChance = 0.4;
+        spreadChance = 1;
       }
 
-      // Magenta 強浮遊
+      // ===== 🟣 Magenta 浮遊 =====
       if(c==="#ff00ff"){
-        if(Math.random()<0.06 && !grid[y-1]?.[x]){
+        if(y>0 && Math.random()<0.05 && !grid[y-1][x]){
           grid[y-1][x]=c;
           grid[y][x]=null;
           continue;
         }
       }
 
-      // Red 超粘性
+      // ===== 🔴 Red 高粘性 =====
       if(c==="#ff0033"){
-        fallChance=0.2;
-        spreadChance=0.01;
+        fallChance = 0.2;
+        spreadChance = 0.02;
       }
 
-      // Lime 爆拡散
+      // ===== 🟢 Lime 爆拡散 =====
       if(c==="#00ff66"){
-        spreadChance=1;
+        spreadChance = 1;
       }
 
-      // Orange 高跳躍
+      // ===== 🟠 Orange ジャンプ =====
       if(c==="#ff8800"){
-        if(Math.random()<0.08){
-          let nx=x+(Math.random()<0.5?-1:1);
-          let ny=y-1;
-          if(grid[ny]?.[nx]==null){
-            grid[ny][nx]=c;
+        if(y>0 && Math.random()<0.08){
+          let dir = Math.random()<0.5?-1:1;
+          if(grid[y-1]?.[x+dir]==null){
+            grid[y-1][x+dir]=c;
             grid[y][x]=null;
             continue;
           }
         }
       }
 
-      if(!grid[y+1]?.[x] && Math.random()<fallChance){
+      // ===== 重力処理 =====
+      if(y+1<P_ROWS && !grid[y+1][x] && Math.random()<fallChance){
         grid[y+1][x]=c;
         grid[y][x]=null;
-      }else if(Math.random()<spreadChance){
+      }
+      else if(Math.random()<spreadChance){
         let dir=Math.random()<0.5?-1:1;
-        if(!grid[y+1]?.[x+dir]){
+        if(grid[y+1]?.[x+dir]==null){
           grid[y+1][x+dir]=c;
           grid[y][x]=null;
         }
@@ -369,69 +310,55 @@ function updatePhysics(){
     }
   }
 }
-function clearLines(){
 
-  let cleared = 0;
-  let toClear = [];
-
-  // 横方向だけチェック
-  for(let y=0;y<P_ROWS;y++){
-
-    let streakColor = null;
-    let streakStart = 0;
-    let streakCount = 0;
-
-    for(let x=0;x<P_COLS;x++){
-
-      let cell = grid[y][x];
-
-      if(cell && cell === streakColor){
-        streakCount++;
-      }else{
-
-        // 4連以上なら記録
-        if(streakCount >= 4){
-          for(let k=0;k<streakCount;k++){
-            toClear.push({x: streakStart + k, y});
+function clearCheck(){
+  let cleared=false;
+  for(let by=0;by<ROWS;by++){
+    let streak=0,color=null;
+    for(let bx=0;bx<=COLS;bx++){
+      let c=bx<COLS?grid[by*SUB]?.[bx*SUB]:null;
+      if(c && c===color){streak++;}
+      else{
+        if(streak>=5){
+          for(let i=1;i<=streak;i++){
+            for(let sy=0;sy<SUB;sy++)
+              for(let sx=0;sx<SUB;sx++)
+                grid[by*SUB+sy][(bx-i)*SUB+sx]=null;
           }
+          cleared=true;
         }
-
-        streakColor = cell;
-        streakStart = x;
-        streakCount = cell ? 1 : 0;
-      }
-    }
-
-    // 行の最後チェック
-    if(streakCount >= 4){
-      for(let k=0;k<streakCount;k++){
-        toClear.push({x: streakStart + k, y});
+        color=c;
+        streak=c?1:0;
       }
     }
   }
-
-  // 実際に削除（横のみ）
-  if(toClear.length > 0){
-
-    toClear.forEach(p=>{
-      grid[p.y][p.x] = null;
-    });
-
-    cleared = 1; // 横1ライン扱い
-    lines++;
-    combo++;
-    score += 200 * combo;
-
-    showMessage("HORIZONTAL 4!");
-  }else{
-    combo = 0;
-  }
-
+  if(cleared){
+    combo++;lines++;score+=500*combo;
+    messageText="HORIZONTAL 5!";
+    messageTimer=60;
+  }else combo=0;
   updateUI();
 }
-function isTShape(shape){
-  return JSON.stringify(shape) === JSON.stringify([[0,1,0],[1,1,1]]) ||
-         JSON.stringify(shape) === JSON.stringify([[1,0],[1,1],[1,0]]);
+
+function drop(){
+  current.y++;
+  if(collide()){
+    current.y--;
+    merge();
+    clearCheck();
+    newPiece();
+    if(collide()) gameOver=true;
+  }
+}
+
+function rotate(dir){
+  let m=current.shape;
+  let r=m[0].map((_,i)=>m.map(row=>row[i]));
+  if(dir>0) r.forEach(row=>row.reverse());
+  else r.reverse();
+  let ox=current.x,os=current.shape;
+  current.shape=r;
+  if(collide()){current.shape=os;current.x=ox;}
 }
 
 function updateUI(){
@@ -440,222 +367,48 @@ function updateUI(){
   document.getElementById("combo").textContent=combo;
 }
 
-function rotate(dir){
-  let m=current.shape;
-  let rotated=m[0].map((_,i)=>m.map(r=>r[i]));
-  if(dir>0) rotated.forEach(r=>r.reverse());
-  else rotated.reverse();
-
-  const kicks = [0, -1, 1, -2, 2]; // 簡易壁キック
-
-  let oldShape=current.shape;
-  let oldX=current.x;
-
-  for(let i=0;i<kicks.length;i++){
-    current.shape=rotated;
-    current.x=oldX+kicks[i];
-    if(!collide()){
-      lastRotate = true;
-      return;
-    }
-  }
-
-  current.shape=oldShape;
-  current.x=oldX;
-}
-
-function drop(){
-  if(gameOver) return;
-
-  current.y++;
-
-  if(collide()){
-    current.y--;
-    merge();
-
-    // ★ ここで1回だけ横判定
-    clearHorizontalOnly();
-
-    newPiece();
-
-    if(collide()){
-      gameOver=true;
-    }
-  }
-}
-
 document.addEventListener("keydown",e=>{
-
-  if(e.key==="p"){
-    paused=!paused;
-    return;
-  }
-
-  if(e.key==="r"){
-    init();
-    holdPiece=null;
-    newPiece();
-    gameOver=false;
-    return;
-  }
-
-  if(paused || gameOver) return;
-
-  if(e.key==="ArrowLeft"){
-    current.x--;
-    if(collide()) current.x++;
-  }
-
-  if(e.key==="ArrowRight"){
-    current.x++;
-    if(collide()) current.x--;
-  }
-
-  if(e.key==="ArrowDown"){
-    drop();
-  }
-
-  // ↑キーで反時計回り
-  if(e.key==="ArrowUp"){
-    rotate(-1);
-  }
-
-  // Aでも反時計回り
-  if(e.key==="a"){
-    rotate(-1);
-  }
-
-  // Dで時計回り
-  if(e.key==="d"){
-    rotate(1);
-  }
-
-  // Cキーでホールド
-  if(e.key==="c"){
-    hold();
-  }
-
-  // スペースでハードドロップ
+  if(e.key==="p") paused=!paused;
+  if(e.key==="r"){init();newPiece();gameOver=false;}
+  if(paused||gameOver) return;
+  if(e.key==="ArrowLeft"){current.x--;if(collide())current.x++;}
+  if(e.key==="ArrowRight"){current.x++;if(collide())current.x--;}
+  if(e.key==="ArrowDown") drop();
+  if(e.key==="ArrowUp") rotate(-1);
+  if(e.key==="a") rotate(-1);
+  if(e.key==="d") rotate(1);
   if(e.key===" "){
-    while(!collide()){
-      current.y++;
-    }
-    current.y--;
-    drop();
+    while(!collide()) current.y++;
+    current.y--;drop();
   }
-
+  if(e.key==="c") hold();
 });
 
-let counter=0;
+function hold(){
+  if(!canHold) return;
+  if(!holdPiece){
+    holdPiece={shape:JSON.parse(JSON.stringify(current.shape)),color:current.color};
+    newPiece();
+  }else{
+    let temp={shape:current.shape,color:current.color};
+    current.shape=JSON.parse(JSON.stringify(holdPiece.shape));
+    current.color=holdPiece.color;
+    current.x=3;current.y=0;
+    holdPiece=temp;
+  }
+  canHold=false;
+}
+
 function loop(){
   if(!paused){
     counter++;
-    if(counter>30){ drop(); counter=0; }
-
-    // ★ 物理を3回回す（速度UP）
-    for(let i=0;i<3;i++){
-      updatePhysics();
-    }
-
+    if(counter>35){drop();counter=0;}
+    updatePhysics();
     draw();
   }
   requestAnimationFrame(loop);
 }
-canvas.addEventListener("touchstart",()=>{
-  if(gameOver){
-    init();
-    newPiece();
-    gameOver=false;
-  }
-});
-canvas.addEventListener("touchstart",(e)=>{
-  const rect=canvas.getBoundingClientRect();
-  const x=e.touches[0].clientX-rect.left;
-  const y=e.touches[0].clientY-rect.top;
 
-  // 左上エリアをホールド判定
-  if(x<80 && y<80){
-    hold();
-  }
-});
-function hold(){
-  if(!canHold || gameOver) return;
-
-  if(!holdPiece){
-    holdPiece = {
-      shape: JSON.parse(JSON.stringify(current.shape)),
-      color: current.color
-    };
-    newPiece();
-  }else{
-    let temp = {
-      shape: JSON.parse(JSON.stringify(current.shape)),
-      color: current.color
-    };
-
-    current.shape = JSON.parse(JSON.stringify(holdPiece.shape));
-    current.color = holdPiece.color;
-    current.x = 3;
-    current.y = 0;
-
-    holdPiece = temp;
-  }
-
-  canHold = false;
-}
-function clearHorizontalOnly(){
-
-  let cleared = false;
-
-  for(let blockY=0; blockY<ROWS; blockY++){
-
-    let streakColor=null;
-    let streakCount=0;
-
-    for(let blockX=0; blockX<=COLS; blockX++){
-
-      let color = null;
-
-      if(blockX < COLS){
-        // ブロック左上の色を見る
-        color = grid[blockY*SUB]?.[blockX*SUB];
-      }
-
-      if(color && color===streakColor){
-        streakCount++;
-      }else{
-
-        // 🔥 ここを5に変更
-        if(streakCount >= 5){
-          for(let i=1;i<=streakCount;i++){
-            let bx = blockX - i;
-
-            for(let sy=0; sy<SUB; sy++){
-              for(let sx=0; sx<SUB; sx++){
-                grid[blockY*SUB+sy][bx*SUB+sx] = null;
-              }
-            }
-          }
-          cleared=true;
-        }
-
-        streakColor=color;
-        streakCount=color?1:0;
-      }
-    }
-  }
-
-  if(cleared){
-    combo++;
-    lines++;
-    score+=400*combo;
-    showMessage("HORIZONTAL 5!");
-  }else{
-    combo=0;
-  }
-
-  updateUI();
-}
 newPiece();
 loop();
 </script>
