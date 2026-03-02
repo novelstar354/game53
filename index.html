@@ -295,26 +295,34 @@ if(c === "#ffee00"){
   continue; // 共通砂落下は無効
 }
 
-      // ===============================
-      // 🔵 CYAN 水（流体）
-      // ===============================
-      if(c === "#00eaff"){
-        if(!grid[y+1]?.[x]){
-          grid[y+1][x] = c;
-          grid[y][x] = null;
-          updated.add(x + "," + (y+1));
-          continue;
-        }
+      // 🔵 CYAN 水（流体改）
+if(c === "#00eaff"){
+  // 下に落ちる
+  if(!grid[y+1]?.[x]){
+    grid[y+1][x] = c;
+    grid[y][x] = null;
+    updated.add(x + "," + (y+1));
+    continue;
+  }
 
-        // 横流れ強化
-        let dir = Math.random() < 0.5 ? -1 : 1;
-        if(!grid[y]?.[x+dir]){
-          grid[y][x+dir] = c;
-          grid[y][x] = null;
-          updated.add((x+dir) + "," + y);
-          continue;
-        }
-      }
+  // 左右斜めにも流れる
+  let dirs = [-1,1];
+  dirs.sort(()=>Math.random()-0.5); // ランダム優先
+  for(let dir of dirs){
+    if(!grid[y+1]?.[x+dir]){
+      grid[y+1][x+dir] = c;
+      grid[y][x] = null;
+      updated.add((x+dir) + "," + (y+1));
+      break;
+    } else if(!grid[y]?.[x+dir]){
+      grid[y][x+dir] = c;
+      grid[y][x] = null;
+      updated.add((x+dir) + "," + y);
+      break;
+    }
+  }
+  continue;
+}
 
       // ===============================
       // 🟣 MAGENTA 反重力
@@ -328,13 +336,11 @@ if(c === "#ffee00"){
         }
       }
 
-      // ===============================
-// 🔴 RED 高粘性
-// ===============================
+      // 🔴 RED マグマ
 if(c === "#ff0033"){
 
-  // 20%で落下（かなり粘る）
-  if(Math.random() < 0.20){
+  // 落下は20%くらい（粘度高め）
+  if(Math.random() < 0.2){
     if(!grid[y+1]?.[x]){
       grid[y+1][x] = c;
       grid[y][x] = null;
@@ -343,18 +349,25 @@ if(c === "#ff0033"){
     }
   }
 
-  // 5%で斜め
-  if(Math.random() < 0.05){
-    let dir = Math.random()<0.5?-1:1;
-    if(!grid[y+1]?.[x+dir]){
+  // 横に少しだけ溶岩が流れる
+  let dirs = [-1,1];
+  dirs.sort(()=>Math.random()-0.5);
+  for(let dir of dirs){
+    if(!grid[y+1]?.[x+dir] && Math.random()<0.05){
       grid[y+1][x+dir] = c;
       grid[y][x] = null;
       updated.add((x+dir) + "," + (y+1));
-      continue;
+      break;
     }
   }
 
-  continue; // 共通処理無効
+  // 下が完全に詰まると少し燃える（ランダムで消える）
+  if(!grid[y+1]?.[x] && Math.random()<0.01){
+    grid[y][x]=null;
+    effects.push({x:x,y:y,life:15,color:"#ff4400"});
+  }
+
+  continue; // 共通砂落下は無効
 }
 
       // ===============================
@@ -372,20 +385,27 @@ if(c === "#ff0033"){
         }
       }
 
-      // ===============================
-      // 🟠 ORANGE ジャンプ粒子
-      // ===============================
-      if(c === "#ff8800"){
-        if(Math.random() < 0.15){
-          let dir = Math.random()<0.5?-1:1;
-          if(y>1 && !grid[y-2]?.[x+dir]){
-            grid[y-2][x+dir] = c;
-            grid[y][x] = null;
-            updated.add((x+dir) + "," + (y-2));
-            continue;
-          }
+    // 🟠 ORANGE 拡散粒子
+if(c === "#ff8800"){
+  if(!grid[y+1]?.[x]){
+    grid[y+1][x] = c;
+    grid[y][x] = null;
+    updated.add(x + "," + (y+1));
+    continue;
+  } else {
+    let dirs = [-1,1];
+    dirs.forEach(dir=>{
+      if(!grid[y]?.[x+dir]){
+        if(Math.random()<0.5){
+          grid[y][x+dir] = c;
+          grid[y][x] = null;
+          updated.add((x+dir) + "," + y);
         }
       }
+    });
+  }
+  continue;
+}
 
       // ===============================
       // 共通：砂の自然落下
