@@ -514,7 +514,23 @@ function drop(){
     if(collide()) gameOver=true;
   }
 }
-
+// ===============================
+// 上部ライン圧迫による沈み処理
+// ===============================
+function sinkBlocks(){
+  const threshold = 5; // 上から何ラインで沈み始めるか（SUB単位で調整可能）
+  for(let y=0; y<threshold*SUB; y++){
+    for(let x=0; x<P_COLS; x++){
+      if(grid[y][x]){
+        // 下に空きがあれば沈む
+        if(!grid[y+1]?.[x]){
+          grid[y+1][x] = grid[y][x];
+          grid[y][x] = null;
+        }
+      }
+    }
+  }
+}
 function rotate(dir){
   let m=current.shape;
   let r=m[0].map((_,i)=>m.map(row=>row[i]));
@@ -568,6 +584,7 @@ function loop(){
     counter++;
     if(counter>35){drop();counter=0;}
     updatePhysics();
+sinkBlocks();
     draw();
   }
   requestAnimationFrame(loop);
