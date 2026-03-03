@@ -435,9 +435,9 @@ if(c === "#ff8800"){
     for(let y=P_ROWS-1;y>=0;y--){
       if(grid[y][x]){
         weight++;
-        if(weight>25 && Math.random()<0.03){
+       /* if(weight>25 && Math.random()<0.03){
           grid[y][x]=null;
-        }
+        }*/
       }else{
         weight=0;
       }
@@ -584,7 +584,7 @@ function loop(){
     counter++;
     if(counter>35){drop();counter=0;}
     updatePhysics();
-sinkBlocks();
+//sinkBlocks();
     draw();
   }
   requestAnimationFrame(loop);
